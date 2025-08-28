@@ -10,7 +10,7 @@ It combines reinforcement learning (MuZero + GNNs), SAT-based completion, and cu
 
 ```bash
 # code Clone and enter
-git clone https://github.com/RandyRDavila/Ramsey-MuZero.git Ramsey-Experiment
+git clone https://github.com/RandyRDavila/Ramsey-MuZero.git Ramsey-MuZero
 cd Ramsey-Experiment
 
 # code Create and activate a virtual environment
