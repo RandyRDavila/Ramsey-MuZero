@@ -65,9 +65,6 @@ You’ll see an ASCII banner, an environment summary, and an interactive menu.
 - **Empty a results directory (keep folder)**
   Deletes all subdirectories/files under a chosen results path but **keeps** the folder.
 
-- **Delete a results directory**
-  Removes the folder entirely (with guardrails against system roots).
-
 - **Exit**
   Quit the CLI.
 
