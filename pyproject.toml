@@ -1,0 +1,39 @@
+[project]
+name = "ramsey-experiment"
+version = "0.1.0"
+requires-python = ">=3.10"
+readme = "README.md"
+dependencies = [
+    "numpy",
+    "pyyaml",
+    "tqdm",
+    "psutil",
+    "matplotlib",
+    "networkx",
+    "pillow",
+    "pytest",
+    "rich",
+    "pyfiglet",
+    "tensorboard",
+    "python-sat[aiger,pblib]",
+    "ortools",
+    "nevergrad",
+    "ray",
+    "seaborn",
+    "torch",
+    "torchvision",
+    "torchaudio",
+    "questionary>=2.0.1,<3",
+    "prompt_toolkit>=3.0.30,<3.0.47",
+]
+
+[project.scripts]
+ramsey = "ramsey.cli:main"
+
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["ramsey*"]
