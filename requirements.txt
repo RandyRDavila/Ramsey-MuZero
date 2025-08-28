@@ -1,0 +1,23 @@
+numpy
+pyyaml
+tqdm
+psutil
+matplotlib
+networkx
+pillow
+pytest
+rich
+pyfiglet
+tensorboard
+python-sat[aiger,pblib]
+ortools
+nevergrad
+ray
+seaborn
+torch
+torchvision
+torchaudio
+
+# pins to avoid VSplit crash
+questionary>=2.0.1,<3
+prompt_toolkit>=3.0.30,<3.0.47

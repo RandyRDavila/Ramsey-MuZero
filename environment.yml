@@ -1,0 +1,27 @@
+name: muzero-ramsey
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.12
+  - numpy
+  - pyyaml
+  - tqdm
+  - psutil
+  - matplotlib
+  - networkx
+  - pillow
+  - pytest
+  - rich
+  - pyfiglet
+  - questionary>=2.0.1,<3
+  - pip
+  - pip:
+      - tensorboard
+      - python-sat[aiger,pblib]
+      - ortools
+      - nevergrad
+      - ray
+      - seaborn
+      # pin prompt_toolkit explicitly to avoid the crash
+      - "prompt_toolkit>=3.0.30,<3.0.47"

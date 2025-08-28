@@ -1,0 +1,6 @@
+.venv
+
+
+# Results outputs
+results/*
+!results/.gitkeep
