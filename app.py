@@ -129,8 +129,8 @@ def default_session_state() -> None:
     st.session_state.setdefault('n', 6)
     st.session_state.setdefault('r', 3)
     st.session_state.setdefault('any_kr_loss', False)
-    # Circulant availability is a toggle; moves can be chosen per-turn when enabled
-    st.session_state.setdefault('circulant_enabled', False)
+    # Circulant availability is a toggle; choose per-move when enabled
+    st.session_state.setdefault('circulant_enabled', True)
 
     st.session_state.setdefault('to_play', RED)
     st.session_state.setdefault('edges', [])
@@ -144,7 +144,11 @@ def default_session_state() -> None:
     st.session_state.setdefault('winner', None)
     st.session_state.setdefault('draw', False)
     st.session_state.setdefault('terminal_reason', '')
+
+    # Rewards: track totals and a per-ply trace for plotting
     st.session_state.setdefault('rewards', {RED: 0.0, BLUE: 0.0})
+    st.session_state.setdefault('reward_trace', [(0, 0.0, 0.0)])  # list of (ply, red_total, blue_total)
+
     # UI selections
     st.session_state.setdefault('sel_u', 0)
     st.session_state.setdefault('sel_v', 1)
@@ -178,7 +182,9 @@ def reset_game(n: int, r: int, any_kr_loss: bool, circulant_enabled: bool) -> No
     st.session_state.winner = None
     st.session_state.draw = False
     st.session_state.terminal_reason = ''
+
     st.session_state.rewards = {RED: 0.0, BLUE: 0.0}
+    st.session_state.reward_trace = [(0, 0.0, 0.0)]
 
     st.session_state.sel_u = 0
     st.session_state.sel_v = 1 if n >= 2 else 0
@@ -191,7 +197,6 @@ def reset_game(n: int, r: int, any_kr_loss: bool, circulant_enabled: bool) -> No
 
 def _set_edge(idx: int, color: Color) -> None:
     """Set edge at global index to color, updating bitsets. Assumes currently uncolored."""
-    n = st.session_state.n
     (u, v) = st.session_state.edges[idx]
     st.session_state.edge_state[idx] = color
     bit = 1 << v
@@ -218,34 +223,48 @@ def _unset_edge(idx: int, color: Color) -> None:
         st.session_state.blue_bits[v] &= ~bit_rev
 
 
+def _append_reward_trace():
+    """Append current cumulative rewards with current ply index."""
+    ply = len(st.session_state.history)
+    rt = st.session_state.rewards
+    st.session_state.reward_trace.append((ply, float(rt[RED]), float(rt[BLUE])))
+
+
 def _apply_terminal(loss_for: Optional[Color], draw: bool, reason: str) -> None:
     st.session_state.terminal = True
     st.session_state.draw = draw
-    st.session_state.winner = None if draw else (BLUE if loss_for == RED else RED)
-    st.session_state.terminal_reason = reason
     if draw:
-        return
-    if loss_for is not None:
-        st.session_state.rewards[loss_for] += -1.0
+        # First player to force a draw wins: current mover gets +1.0
+        mover = st.session_state.to_play
+        st.session_state.winner = mover
+        st.session_state.rewards[mover] += 1.0
+        st.session_state.terminal_reason = reason
+    else:
+        st.session_state.winner = BLUE if loss_for == RED else RED
+        st.session_state.terminal_reason = reason
+        if loss_for is not None:
+            st.session_state.rewards[loss_for] += -1.0
 
 
 # -------------------------
-# Move application (human/agent)
+# Loss rule helper
 # -------------------------
 
 def _loss_check_after_edge(color_bits: List[int], other_bits: List[int], u: int, v: int, r: int) -> bool:
-    """Return True if the just-added (u,v) creates a K_r according to the active rule.
-    Misère baseline: mover loses if they create K_r in **their** color.
-    Shaping option: mover loses if **either** color now has a K_r (equivalent here, but explicit).
-    """
+    # Misère baseline: mover loses if they create K_r in *their* color
     if created_Kr_by_adding_edge(color_bits, u, v, r):
         return True
+    # Optional shaping: lose if any K_r (either color) exists after move
     if st.session_state.any_kr_loss:
         n = st.session_state.n
         if exists_Kr_global(color_bits, r, n) or exists_Kr_global(other_bits, r, n):
             return True
     return False
 
+
+# -------------------------
+# Move application (human/agent)
+# -------------------------
 
 def apply_edge_move(u: int, v: int, color: Color, move_type: str) -> MoveResult:
     if u > v:
@@ -295,9 +314,11 @@ def apply_edge_move(u: int, v: int, color: Color, move_type: str) -> MoveResult:
     }
     st.session_state.history.append(hist_entry)
 
+    # Toggle to_play if game not over
     if not st.session_state.terminal:
         st.session_state.to_play = BLUE if color == RED else RED
 
+    _append_reward_trace()
     return result
 
 
@@ -360,6 +381,7 @@ def apply_class_move(d: int, color: Color, move_type: str) -> MoveResult:
     if not st.session_state.terminal:
         st.session_state.to_play = BLUE if color == RED else RED
 
+    _append_reward_trace()
     return result
 
 
@@ -438,6 +460,8 @@ def attempt_sat_draw(penalty: float, gate: int) -> MoveResult:
                 _set_edge(idx, color)
                 filled_edges.append((u, v, idx, color))
 
+            # Draw forced by mover via SAT: award +1.0 (penalty already applied earlier)
+            st.session_state.rewards[mover] += 1.0
             _apply_terminal(loss_for=None, draw=True, reason="SAT found a valid draw coloring.")
             res.draw = True
 
@@ -454,6 +478,7 @@ def attempt_sat_draw(penalty: float, gate: int) -> MoveResult:
     }
     st.session_state.history.append(hist_entry)
 
+    _append_reward_trace()
     if filled_edges:
         st.session_state.last_move = ([(u, v) for (u, v, *_ ) in filled_edges], None)
 
@@ -485,6 +510,7 @@ def undo_last_move() -> None:
         mover = entry['payload']['mover']
         st.session_state.rewards[mover] -= entry['payload']['penalty']
 
+    # Restore previous flags/state
     st.session_state.last_move = entry['prev_last_move']
     st.session_state.terminal = entry['prev_terminal']
     st.session_state.winner = entry['prev_winner']
@@ -492,6 +518,10 @@ def undo_last_move() -> None:
     st.session_state.terminal_reason = entry['prev_reason']
     st.session_state.to_play = entry['prev_to_play']
     st.session_state.rewards = dict(entry['prev_rewards'])
+
+    # Trim reward trace to match history
+    if st.session_state.reward_trace:
+        st.session_state.reward_trace.pop()
 
 
 # -------------------------
@@ -510,11 +540,11 @@ def draw_graph() -> None:
     for idx, (u, v) in enumerate(edges):
         color = edge_state[idx]
         if color == 0:
-            G.add_edge(u, v, color='gray', width=1.0, alpha=0.4)
+            G.add_edge(u, v, color='gray', width=1.0, alpha=0.35)
         elif color == RED:
-            G.add_edge(u, v, color='red', width=2.0, alpha=0.9)
+            G.add_edge(u, v, color='red', width=2.5, alpha=0.95)
         else:
-            G.add_edge(u, v, color='blue', width=2.0, alpha=0.9)
+            G.add_edge(u, v, color='blue', width=2.5, alpha=0.95)
 
     highlight_set = set()
     if st.session_state.last_move is not None:
@@ -523,13 +553,13 @@ def draw_graph() -> None:
             a, b = (u, v) if u < v else (v, u)
             highlight_set.add((a, b))
 
-    fig, ax = plt.subplots(figsize=(6, 6))
+    fig, ax = plt.subplots(figsize=(7, 7))
     ax.axis('off')
 
     for (u, v, data) in G.edges(data=True):
         width = data.get('width', 2.0)
         if (min(u, v), max(u, v)) in highlight_set:
-            width = max(width, 3.5)
+            width = max(width, 3.8)
         nx.draw_networkx_edges(
             G,
             pos,
@@ -539,9 +569,28 @@ def draw_graph() -> None:
             alpha=data.get('alpha', 0.9),
         )
 
-    nx.draw_networkx_nodes(G, pos, node_size=300, node_color='white', edgecolors='black')
-    nx.draw_networkx_labels(G, pos, font_size=10)
+    nx.draw_networkx_nodes(G, pos, node_size=320, node_color='white', edgecolors='black', linewidths=1.2)
+    nx.draw_networkx_labels(G, pos, font_size=11, font_weight='bold')
 
+    st.pyplot(fig)
+    plt.close(fig)
+
+
+def draw_rewards_plot():
+    trace = st.session_state.reward_trace
+    if not trace or len(trace) < 1:
+        return
+    xs = [t[0] for t in trace]
+    red_y = [t[1] for t in trace]
+    blue_y = [t[2] for t in trace]
+
+    fig, ax = plt.subplots(figsize=(6.5, 3.2))
+    ax.plot(xs, red_y, marker='o', linewidth=2.5, label='RED (You)')
+    ax.plot(xs, blue_y, marker='o', linewidth=2.5, label='BLUE (Agent)')
+    ax.set_xlabel('Ply (moves)')
+    ax.set_ylabel('Cumulative reward')
+    ax.grid(True, alpha=0.25)
+    ax.legend(loc='best')
     st.pyplot(fig)
     plt.close(fig)
 
@@ -606,7 +655,7 @@ def sidebar_controls():
     circulant_enabled = st.sidebar.toggle(
         "Enable circulant macro moves",
         value=st.session_state.circulant_enabled,
-        help="When ON, you can choose per-move between single edge and distance-class coloring."
+        help="When ON, choose per-move between single edge and distance-class coloring."
     )
 
     st.sidebar.subheader("SAT options")
@@ -651,17 +700,17 @@ Play against a **random BLUE agent** on the complete graph $K_n$ by coloring edg
 **Rules**
 - **Misère baseline:** You **lose immediately** if your move creates a monochromatic $K_r$ **in your own color**.
 - **Any $K_r$ loss (optional):** If toggled ON, you lose if after your move **either** color has a monoclique $K_r$.
-- If all edges are colored and no $K_r$ exists in either color, the game is a **draw**.
+- If all edges are colored and no $K_r$ exists in either color, the mover who **forces the draw** **wins** and gets **+1.0**.
 
 **Moves**
 - **Single edge:** Choose endpoints $u<v$ and color $(u,v)$ RED.
 - **Circulant macro (optional):** Enable in the sidebar, then on your turn choose a distance class $d\in\{1,\dots,\lfloor n/2\rfloor\}$ to color **all currently uncolored** edges in that class. If any edge in the macro creates a $K_r$, you **instantly lose**; already-colored edges remain.
 
 **SAT finisher (optional)**
-- If enabled and within the gate, you may attempt a **draw completion** with a SAT solver (small penalty applied to you). If SAT finds a 2-coloring with **no** mono $K_r$, the game ends in a draw.
+- If enabled and within the gate, you may attempt a **draw completion** with a SAT solver. This applies a small **penalty** to you immediately; if SAT succeeds, the draw is **yours** (+1.0) despite the penalty.
 
 **Rewards**
-- Loss: mover gets **-1.0**. Draw/Safe moves: **0.0**. SAT attempt: add the configured (typically small) negative penalty to the mover.
+- Loss: mover **-1.0**. Draw forced by mover: **+1.0** to that mover. SAT adds its (usually small) negative penalty.
 
 **Tips**
 - Try `n=6, r=3` to see quick triangle losses.
@@ -698,7 +747,7 @@ def main():
         st.write(f"**Rewards** — RED (You): {rtot[RED]:.2f} | BLUE (Agent): {rtot[BLUE]:.2f}")
         if st.session_state.terminal:
             if st.session_state.draw:
-                st.success(f"**Draw:** {st.session_state.terminal_reason}")
+                st.success(f"**Draw forced by {'You' if st.session_state.winner == RED else 'Agent'}:** {st.session_state.terminal_reason}")
             else:
                 loser = 'RED (You)' if st.session_state.winner == BLUE else 'BLUE (Agent)'
                 st.error(f"**Loss for {loser}:** {st.session_state.terminal_reason}")
@@ -717,6 +766,9 @@ def main():
                         st.rerun()
                 else:
                     st.caption(f"SAT gated: remaining {rem} > gate {cfg['sat_gate']} or game over.")
+
+        st.subheader("Reward trajectory")
+        draw_rewards_plot()
 
         st.subheader("Controls")
         if st.button("Let agent move (random)", use_container_width=True):
@@ -801,5 +853,5 @@ def main():
 
 if __name__ == "__main__":
     if 'edge_state' not in st.session_state or st.session_state.edge_state is None:
-        reset_game(6, 3, any_kr_loss=False, circulant_enabled=False)
+        reset_game(6, 3, any_kr_loss=False, circulant_enabled=True)
     main()
