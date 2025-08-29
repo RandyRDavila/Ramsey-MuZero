@@ -17,6 +17,7 @@ seaborn
 torch
 torchvision
 torchaudio
+streamlit
 
 # pins to avoid VSplit crash
 questionary>=2.0.1,<3

@@ -119,6 +119,16 @@ Initial targets include classical cases (e.g., \(R(3,3)\)) for validation, then 
 
 ---
 
+## Game Play App
+
+To play the Misere Ramsey game, run the following command in the terminal:
+
+```bash
+streamlit run app.py
+```
+
+---
+
 ## License & Citation
 
 Add your license text here (e.g., MIT).
