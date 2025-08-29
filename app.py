@@ -644,7 +644,7 @@ def agent_random_move() -> MoveResult:
 def sidebar_controls():
     st.sidebar.header("Game settings")
 
-    n = st.sidebar.number_input("n (size of K_n)", min_value=3, max_value=24, value=st.session_state.n, step=1)
+    n = st.sidebar.number_input("n (size of K_n)", min_value=3, max_value=44, value=st.session_state.n, step=1)
     r = st.sidebar.number_input("r (target K_r)", min_value=3, max_value=6, value=st.session_state.r, step=1)
 
     any_kr_loss = st.sidebar.toggle(
