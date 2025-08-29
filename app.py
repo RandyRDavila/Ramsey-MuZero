@@ -664,7 +664,7 @@ def sidebar_controls():
         help="Attempt to finish to a draw; small penalty to the mover."
     )
     sat_penalty = st.sidebar.number_input("SAT penalty", value=-0.05, step=0.01, format="%.2f")
-    sat_gate = st.sidebar.number_input("SAT gate (max uncolored edges)", value=60, step=5)
+    sat_gate = st.sidebar.number_input("SAT gate (max uncolored edges)", value=1000, step=5)
 
     c1, c2 = st.sidebar.columns(2)
     with c1:
